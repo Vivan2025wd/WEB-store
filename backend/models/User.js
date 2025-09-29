@@ -2,9 +2,10 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    passwordHash: { type: String, required: true }
+    name: String,
+    email: { type: String, unique: true },
+    password: String,
+    isAdmin: { type: Boolean, default: false }, // 👈 Admin flag
   },
   { timestamps: true }
 );

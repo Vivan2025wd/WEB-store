@@ -28,13 +28,16 @@ store-platform/
 │  │   ├─ dashboard.jsx          # seller dashboard (manage store & products)
 │  │   ├─ create-store.jsx       # setup a new store (name, logo, theme)
 │  │   ├─ store/                 # dynamic seller storefronts
+|  |   |   ├─storePage.jsx
 │  │   │   └─ [storeId].jsx      # public storefront page for a seller
 │  │   ├─ product.jsx            # product listing (generic marketplace view)
+|  |   ├─ admin_login.jsx
 │  │   └─ about.jsx              # about the platform
 │  │
 │  ├─ services/                  # API & helper logic
 │  │   ├─ api.js                 # handles fetch calls to backend
 │  │   ├─ auth.js                # login, register, session handling
+|  |   ├─ utils.js
 │  │   └─ payment.js             # payment + commission logic (Stripe integration)
 │  │
 │  ├─ styles/
@@ -51,6 +54,7 @@ store-platform/
 │  │   └─ Order.js               # order schema
 │  │
 │  ├─ routes/
+|  |   ├─ adinRoutes.js
 │  │   ├─ authRoutes.js          # login/signup endpoints
 │  │   ├─ storeRoutes.js         # create/manage store
 │  │   ├─ productRoutes.js       # add/edit products
@@ -61,6 +65,12 @@ store-platform/
 │  │   ├─ db.js                  # database connection
 │  │   └─ stripe.js              # stripe setup
 │  │
+|  ├─ middleware/
+|  |   └─authMiddleware.js
+|  |
+|  ├─ package-lock.json
+|  ├─ .env
+|  ├─ package.js
 │  ├─ server.js                  # Express app entrypoint
 │  └─ package.json
 │

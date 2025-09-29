@@ -2,14 +2,18 @@ import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import storeRoutes from "./routes/storeRoutes.js"; // 👈 will now work
+import productRoutes from "./routes/productRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+
 
 // Routes
 app.use("/store", storeRoutes);
+app.use("/products", productRoutes);
+app.use("/admin", adminRoutes);
 
 mongoose
   .connect(process.env.MONGO_URI)

@@ -6,7 +6,7 @@ import Home from "./pages/index";
 import Login from "./pages/login";
 import Dashboard from "./pages/dashboard";
 import CreateStore from "./pages/create-store";
-import StorePage from "./pages/store/storeId";
+import StorePage from "./pages/store/storeId"; // 👈 keep ONE StorePage import
 
 export default function App() {
   return (
@@ -19,7 +19,8 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/create-store" element={<CreateStore />} />
-            <Route path="/store/storeId" element={<StorePage />} />
+            {/* Dynamic store route */}
+            <Route path="/store/:storeId" element={<StorePage />} />
           </Routes>
         </main>
         <Footer />
