@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { login, register, getCurrentUser, logout } from "../services/auth";
+import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -9,6 +10,8 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [user, setUser] = useState(getCurrentUser());
 
+  const navigate = useNavigate();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -16,13 +19,14 @@ export default function LoginPage() {
         const data = await login(email, password);
         setUser(data.user);
         setMessage("✅ Logged in successfully!");
+        navigate("/dashboard"); // 👈 redirect after login
       } else {
         await register(name, email, password);
         setMessage("✅ Registered successfully! Now login.");
         setIsLogin(true);
       }
     } catch (err) {
-      setMessage("❌ " + err.message);
+      setMessage("❌ " + (err.message || "Login failed"));
     }
   };
 
@@ -54,38 +58,40 @@ export default function LoginPage() {
           {isLogin ? "Login" : "Register"}
         </h1>
 
-        {!isLogin && (
+        <form onSubmit={handleSubmit}>
+          {!isLogin && (
+            <input
+              type="text"
+              placeholder="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full p-2 border rounded mb-3"
+            />
+          )}
+
           <input
-            type="text"
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full p-2 border rounded mb-3"
           />
-        )}
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 border rounded mb-3"
-        />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-2 border rounded mb-3"
+          />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 border rounded mb-3"
-        />
-
-        <button
-          onClick={handleSubmit}
-          className="w-full bg-blue-600 text-white p-2 rounded"
-        >
-          {isLogin ? "Login" : "Register"}
-        </button>
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white p-2 rounded"
+          >
+            {isLogin ? "Login" : "Register"}
+          </button>
+        </form>
 
         <p className="mt-3 text-center text-sm">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}

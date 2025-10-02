@@ -4,14 +4,11 @@ import Navbar from "../components/Navbar";
 export default function About() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* Navbar */}
-      <Navbar />
-
       {/* About Content */}
       <main className="flex flex-col items-center justify-center flex-1 text-center px-6">
         <h1 className="text-3xl font-bold text-blue-600 mb-4">About Us</h1>
         <p className="text-lg text-gray-600 max-w-2xl">
-          Welcome to <span className="font-semibold">MyStore</span> — your one-stop shop for the best products at unbeatable prices. 
+          Welcome to <span className="font-semibold">Win Rich Solutions</span> — your one-stop shop for the best products at unbeatable prices. 
           <br /><br />
           We believe shopping should be fast, reliable, and fun. That’s why we provide:
         </p>
@@ -21,11 +18,6 @@ export default function About() {
           <li>✅ 24/7 customer support to assist anytime</li>
         </ul>
       </main>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-gray-300 text-center py-6">
-        <p>© {new Date().getFullYear()} MyStore. All rights reserved.</p>
-      </footer>
     </div>
   );
 }

@@ -1,26 +1,75 @@
-#store-platform/
-├─ public/
+store-platform/
+├─ public/                       # static assets (logos, favicons, etc.)
+│   └─ logo.png
 ├─ src/
-│  ├─ components/
-|  |  |─ Navbar.jsx
-│  ├─ pages/
-│  │  ├─ index.jsx
-│  │  |─ product.jsx
-|  |  |─ login.jsx
-|  |  └─ about.jsx 
+│  ├─ components/                # reusable UI parts
+│  │   ├─ Navbar.jsx             # top navigation
+│  │   ├─ Footer.jsx             # footer
+│  │   ├─ StoreCard.jsx          # preview of seller stores
+│  │   ├─ ProductCard.jsx        # product display
+│  │   └─ DashboardSidebar.jsx   # seller dashboard navigation
+│  │
+│  ├─ pages/                     # main routes
+│  │   ├─ index.jsx              # home page (landing for buyers + sellers)
+│  │   ├─ login.jsx              # seller login/signup
+│  │   ├─ dashboard.jsx          # seller dashboard (manage store & products)
+│  │   ├─ create-store.jsx       # setup a new store (name, logo, theme)
+│  │   ├─ store/                 # dynamic seller storefronts
+|  |   |   ├─storePage.jsx
+│  │   │   └─ [storeId].jsx      # public storefront page for a seller
+│  │   ├─ product.jsx            # product listing (generic marketplace view)
+|  |   ├─ admin_login.jsx
+│  │   └─ about.jsx              # about the platform
+│  │
+│  ├─ services/                  # API & helper logic
+│  │   ├─ api.js                 # handles fetch calls to backend
+│  │   ├─ auth.js                # login, register, session handling
+|  |   ├─ utils.js
+│  │   └─ payment.js             # payment + commission logic (Stripe integration)
+│  │
 │  ├─ styles/
-│  │  └─ tailwind.css
-│  ├─ App.jsx
-│  └─ main.jsx
+│  │   └─ tailwind.css           # Tailwind entrypoint
+│  │
+│  ├─ App.jsx                    # main routes + layout
+│  └─ main.jsx                   # React entrypoint
+│
+├─ backend/                      # backend (Node/Express or Next.js API)
+│  ├─ models/
+│  │   ├─ User.js                # seller/user schema
+│  │   ├─ Store.js               # store schema
+│  │   ├─ Product.js             # product schema
+│  │   └─ Order.js               # order schema
+│  │
+│  ├─ routes/
+|  |   ├─ adinRoutes.js
+│  │   ├─ authRoutes.js          # login/signup endpoints
+│  │   ├─ storeRoutes.js         # create/manage store
+│  │   ├─ productRoutes.js       # add/edit products
+│  │   ├─ orderRoutes.js         # checkout & order handling
+│  │   └─ paymentRoutes.js       # Stripe checkout + commission
+│  │
+│  ├─ config/
+│  │   ├─ db.js                  # database connection
+│  │   └─ stripe.js              # stripe setup
+│  │
+|  ├─ middleware/
+|  |   └─authMiddleware.js
+|  |
+|  ├─ package-lock.json
+|  ├─ .env
+|  ├─ package.js
+│  ├─ server.js                  # Express app entrypoint
+│  └─ package.json
+│
 ├─ postcss.config.js
 ├─ tailwind.config.js
+├─ vite.config.js
 ├─ package.json
-|─ vite.config.js\
-|─ gitignore
-|─ eslint.config.js
-|─ index.html
-|─ package-lock.json
-└─README.md
+├─ .gitignore
+├─ eslint.config.js
+├─ index.html
+└─ README.md
+```
 
 Got it 🚀 — you’re basically describing something like a **multi-vendor e-commerce platform** (similar to Shopify, Wix Stores, or WooCommerce) where:
 

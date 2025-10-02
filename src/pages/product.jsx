@@ -4,7 +4,6 @@ import Navbar from "../components/Navbar";
 export default function Product() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
-      {/* Navbar */}
       <Navbar />
 
       {/* Product Content */}
@@ -14,11 +13,6 @@ export default function Product() {
           Browse our collection of amazing items!
         </p>
       </main>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-gray-300 text-center py-6">
-        <p>© {new Date().getFullYear()} MyStore. All rights reserved.</p>
-      </footer>
     </div>
   );
 }

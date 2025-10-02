@@ -1,11 +1,14 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom"; // ✅ for navigation
 import { slugify } from "../services/utils";
+import api from "../services/api"; // ✅ make sure you have axios/api instance here
 
 export default function CreateStore() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [logo, setLogo] = useState(null);
   const [theme, setTheme] = useState("light");
+  const navigate = useNavigate();
 
   const handleNameChange = (e) => {
     const value = e.target.value;
@@ -13,10 +16,26 @@ export default function CreateStore() {
     setSlug(slugify(value)); // auto-generate slug
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log({ name, slug, logo, theme });
-    // 🔜 send to backend (POST /store/create)
+
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("slug", slug);
+    formData.append("logo", logo);
+    formData.append("theme", theme);
+
+    try {
+      await api.post("/store/create", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data", // ✅ important for file upload
+        },
+      });
+      navigate("/dashboard"); // ✅ redirect after success
+    } catch (err) {
+      console.error(err);
+      alert("❌ Failed to create store");
+    }
   };
 
   return (
@@ -38,7 +57,7 @@ export default function CreateStore() {
           required
         />
 
-        {/* Slug (readonly, auto-generated) */}
+        {/* Slug */}
         <label className="block mb-2 text-gray-700">Store URL</label>
         <input
           type="text"
@@ -53,7 +72,7 @@ export default function CreateStore() {
           </span>
         </p>
 
-        {/* Logo Upload */}
+        {/* Logo */}
         <label className="block mb-2 text-gray-700">Logo</label>
         <input
           type="file"

@@ -1,27 +1,59 @@
-const API_URL = "http://localhost:5000"; // backend base URL
+const API_URL = "http://localhost:5000/api"; // adjust if needed
+
+// Helper: always add token if exists
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const api = {
   get: async (url) => {
     const res = await fetch(API_URL + url, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error("Request failed");
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || "Request failed");
+    }
     return await res.json();
   },
 
   post: async (url, body) => {
+    const isForm = body instanceof FormData;
     const res = await fetch(API_URL + url, {
       method: "POST",
-      headers:
-        body instanceof FormData
-          ? { Authorization: `Bearer ${localStorage.getItem("token")}` }
-          : {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-      body: body instanceof FormData ? body : JSON.stringify(body),
+      headers: isForm ? getAuthHeaders() : { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: isForm ? body : JSON.stringify(body),
     });
-    if (!res.ok) throw new Error("Request failed");
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || "Request failed");
+    }
+    return await res.json();
+  },
+
+  put: async (url, body) => {
+    const res = await fetch(API_URL + url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || "Request failed");
+    }
+    return await res.json();
+  },
+
+  delete: async (url) => {
+    const res = await fetch(API_URL + url, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || "Request failed");
+    }
     return await res.json();
   },
 };
