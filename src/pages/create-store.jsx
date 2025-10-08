@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { slugify } from "../services/utils";
-import api from "../services/api";
-import { getCurrentUser } from "../services/auth";
+import { getCurrentUser, createStore } from "../services/auth";
 
 export default function CreateStore() {
   const [name, setName] = useState("");
@@ -89,25 +88,13 @@ export default function CreateStore() {
     formData.append("theme", theme);
 
     try {
-      await api.post("/store/create", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      await createStore(formData);
       
       // Success - redirect to dashboard
       navigate("/dashboard");
     } catch (err) {
       console.error("Create store error:", err);
-      const errorMsg = err.response?.data?.message || "Failed to create store";
-      
-      if (err.response?.status === 409) {
-        setError("This store URL is already taken. Please choose another.");
-      } else if (err.response?.status === 400) {
-        setError(errorMsg);
-      } else {
-        setError("Failed to create store. Please try again.");
-      }
+      setError(err.message);
     } finally {
       setLoading(false);
     }

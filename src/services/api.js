@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:5000/api"; // adjust if needed
+const API_URL = "http://localhost:5000"; // ✅ Fixed: Removed /api prefix
 
 // Helper: always add token if exists
 const getAuthHeaders = () => {
@@ -12,8 +12,8 @@ const api = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || "Request failed");
+      const err = await res.json().catch(() => ({ error: "Request failed" }));
+      throw new Error(err.error || err.message || "Request failed");
     }
     return await res.json();
   },
@@ -26,8 +26,8 @@ const api = {
       body: isForm ? body : JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || "Request failed");
+      const err = await res.json().catch(() => ({ error: "Request failed" }));
+      throw new Error(err.error || err.message || "Request failed");
     }
     return await res.json();
   },
@@ -39,8 +39,8 @@ const api = {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || "Request failed");
+      const err = await res.json().catch(() => ({ error: "Request failed" }));
+      throw new Error(err.error || err.message || "Request failed");
     }
     return await res.json();
   },
@@ -51,8 +51,8 @@ const api = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || "Request failed");
+      const err = await res.json().catch(() => ({ error: "Request failed" }));
+      throw new Error(err.error || err.message || "Request failed");
     }
     return await res.json();
   },
