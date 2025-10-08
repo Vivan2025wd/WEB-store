@@ -4,27 +4,6 @@ import ProductCard from "../components/ProductCard";
 export default function Home() {
   // Example products (replace later with API call from services/api.js)
   const products = [
-    {
-      id: 1,
-      name: "Wireless Headphones",
-      description: "Noise-cancelling over-ear headphones.",
-      price: 99.99,
-      image: "/headphones.jpg",
-    },
-    {
-      id: 2,
-      name: "Smartwatch",
-      description: "Track your fitness and notifications.",
-      price: 149.99,
-      image: "/smartwatch.jpg",
-    },
-    {
-      id: 3,
-      name: "Gaming Mouse",
-      description: "High precision RGB gaming mouse.",
-      price: 59.99,
-      image: "/mouse.jpg",
-    },
   ];
 
   return (

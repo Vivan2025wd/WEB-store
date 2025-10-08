@@ -1,15 +1,45 @@
 import express from "express";
 import { body, validationResult } from "express-validator";
+import multer from "multer";
+import path from "path";
 import Store from "../models/Store.js";
 import Product from "../models/Product.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/store-logos/'); // Make sure this directory exists
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'logo-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
 // Create store (Protected)
 router.post(
   "/create",
   authMiddleware,
+  upload.single('logo'), // Handle single file upload with field name 'logo'
   [
     body("name").trim().notEmpty().withMessage("Store name is required"),
     body("slug")
@@ -27,7 +57,10 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { name, slug, logo, theme } = req.body;
+      const { name, slug, theme } = req.body;
+      
+      // Get logo path if file was uploaded
+      const logoPath = req.file ? `/uploads/store-logos/${req.file.filename}` : "";
 
       // Check if slug already exists
       const existingStore = await Store.findOne({ slug });
@@ -52,7 +85,7 @@ router.post(
         ownerId: req.user.id,
         name,
         slug,
-        logo: logo || "",
+        logo: logoPath,
         theme: theme || "light",
       });
 
@@ -69,6 +102,7 @@ router.post(
 router.put(
   "/:id",
   authMiddleware,
+  upload.single('logo'),
   [
     body("name").optional().trim().notEmpty().withMessage("Store name cannot be empty"),
     body("theme").optional().isIn(["light", "dark"]).withMessage("Theme must be light or dark"),
@@ -91,11 +125,15 @@ router.put(
         return res.status(403).json({ error: "Not authorized to edit this store" });
       }
 
-      const { name, logo, theme } = req.body;
+      const { name, theme } = req.body;
       
       if (name) store.name = name;
-      if (logo !== undefined) store.logo = logo;
       if (theme) store.theme = theme;
+      
+      // Update logo if new file uploaded
+      if (req.file) {
+        store.logo = `/uploads/store-logos/${req.file.filename}`;
+      }
 
       await store.save();
       res.json(store);
@@ -133,7 +171,6 @@ router.get("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ FIXED: Changed route path to avoid conflict with /:id
 // Get user's own stores (Protected)
 router.get("/user/my-stores", authMiddleware, async (req, res) => {
   try {
@@ -166,7 +203,6 @@ router.get("/public/slug/:slug", async (req, res) => {
       return res.status(404).json({ error: "Store not found" });
     }
 
-    // ✅ FIXED: Check if store is active
     if (!store.isActive) {
       return res.status(403).json({ error: "This store is currently unavailable" });
     }

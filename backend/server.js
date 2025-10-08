@@ -76,18 +76,21 @@ const sanitizeInput = (req, res, next) => {
 app.use(sanitizeInput);
 
 // Rate limiting for auth routes
+// ✅ UPDATED: More lenient limits for development
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per window
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 100 in dev, 5 in prod
   message: "Too many login attempts, please try again later",
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting for local development if needed
+  skip: (req) => process.env.NODE_ENV === 'development' && req.ip === '::1',
 });
 
 // General API rate limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: process.env.NODE_ENV === 'production' ? 100 : 500, // Higher in dev
   message: "Too many requests, please try again later",
 });
 
@@ -152,6 +155,7 @@ connectDB()
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`✅ Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`✅ Client URL: ${process.env.CLIENT_URL}`);
+      console.log(`✅ Auth rate limit: ${process.env.NODE_ENV === 'production' ? '5' : '100'} requests per 15 min`);
     });
 
     // Graceful shutdown

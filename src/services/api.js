@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:5000"; // ✅ Fixed: Removed /api prefix
+const API_URL = "http://localhost:5000";
 
 // Helper: always add token if exists
 const getAuthHeaders = () => {
@@ -8,53 +8,142 @@ const getAuthHeaders = () => {
 
 const api = {
   get: async (url) => {
-    const res = await fetch(API_URL + url, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Request failed" }));
-      throw new Error(err.error || err.message || "Request failed");
+    try {
+      const res = await fetch(API_URL + url, {
+        headers: getAuthHeaders(),
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ 
+          message: `Request failed with status ${res.status}` 
+        }));
+        const error = new Error(err.message || err.error || "Request failed");
+        error.response = { 
+          status: res.status, 
+          data: err 
+        };
+        throw error;
+      }
+      
+      return { data: await res.json() };
+    } catch (error) {
+      // If it's a network error (e.g., backend not running)
+      if (!error.response) {
+        console.error(`Network error fetching ${url}:`, error);
+        const networkError = new Error("Cannot connect to server. Is the backend running?");
+        networkError.response = { 
+          status: 0, 
+          data: { message: "Cannot connect to server" } 
+        };
+        throw networkError;
+      }
+      throw error;
     }
-    return await res.json();
   },
 
   post: async (url, body) => {
-    const isForm = body instanceof FormData;
-    const res = await fetch(API_URL + url, {
-      method: "POST",
-      headers: isForm ? getAuthHeaders() : { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: isForm ? body : JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Request failed" }));
-      throw new Error(err.error || err.message || "Request failed");
+    try {
+      const isForm = body instanceof FormData;
+      const res = await fetch(API_URL + url, {
+        method: "POST",
+        headers: isForm ? getAuthHeaders() : { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: isForm ? body : JSON.stringify(body),
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ 
+          message: `Request failed with status ${res.status}` 
+        }));
+        const error = new Error(err.message || err.error || "Request failed");
+        error.response = { 
+          status: res.status, 
+          data: err 
+        };
+        throw error;
+      }
+      
+      return { data: await res.json() };
+    } catch (error) {
+      if (!error.response) {
+        console.error(`Network error posting to ${url}:`, error);
+        const networkError = new Error("Cannot connect to server. Is the backend running?");
+        networkError.response = { 
+          status: 0, 
+          data: { message: "Cannot connect to server" } 
+        };
+        throw networkError;
+      }
+      throw error;
     }
-    return await res.json();
   },
 
   put: async (url, body) => {
-    const res = await fetch(API_URL + url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Request failed" }));
-      throw new Error(err.error || err.message || "Request failed");
+    try {
+      const res = await fetch(API_URL + url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(body),
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ 
+          message: `Request failed with status ${res.status}` 
+        }));
+        const error = new Error(err.message || err.error || "Request failed");
+        error.response = { 
+          status: res.status, 
+          data: err 
+        };
+        throw error;
+      }
+      
+      return { data: await res.json() };
+    } catch (error) {
+      if (!error.response) {
+        console.error(`Network error putting to ${url}:`, error);
+        const networkError = new Error("Cannot connect to server. Is the backend running?");
+        networkError.response = { 
+          status: 0, 
+          data: { message: "Cannot connect to server" } 
+        };
+        throw networkError;
+      }
+      throw error;
     }
-    return await res.json();
   },
 
   delete: async (url) => {
-    const res = await fetch(API_URL + url, {
-      method: "DELETE",
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Request failed" }));
-      throw new Error(err.error || err.message || "Request failed");
+    try {
+      const res = await fetch(API_URL + url, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ 
+          message: `Request failed with status ${res.status}` 
+        }));
+        const error = new Error(err.message || err.error || "Request failed");
+        error.response = { 
+          status: res.status, 
+          data: err 
+        };
+        throw error;
+      }
+      
+      return { data: await res.json() };
+    } catch (error) {
+      if (!error.response) {
+        console.error(`Network error deleting ${url}:`, error);
+        const networkError = new Error("Cannot connect to server. Is the backend running?");
+        networkError.response = { 
+          status: 0, 
+          data: { message: "Cannot connect to server" } 
+        };
+        throw networkError;
+      }
+      throw error;
     }
-    return await res.json();
   },
 };
 
