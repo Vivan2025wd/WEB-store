@@ -2,63 +2,20 @@ import express from "express";
 import { body, validationResult } from "express-validator";
 import Order from "../models/Order.js";
 import Store from "../models/Store.js";
+import Product from "../models/Product.js";
 import authMiddleware from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Create order (Called after successful payment)
-router.post(
-  "/create",
-  [
-    body("storeId").notEmpty().withMessage("Store ID is required"),
-    body("products").isArray({ min: 1 }).withMessage("Products array required"),
-    body("buyerInfo.name").trim().notEmpty().withMessage("Buyer name required"),
-    body("buyerInfo.email").isEmail().withMessage("Valid email required"),
-    body("total").isFloat({ min: 0 }).withMessage("Valid total required"),
-  ],
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
+// ✅ REMOVED: This should only be created via Stripe webhook
+// Create order endpoint removed - orders are created automatically by payment webhook
 
-      const { storeId, products, buyerInfo, total } = req.body;
-
-      // ✅ Verify store exists
-      const store = await Store.findById(storeId);
-      if (!store) {
-        return res.status(404).json({ error: "Store not found" });
-      }
-
-      // Calculate commission (10%)
-      const commissionRate = 0.1;
-      const commission = total * commissionRate;
-
-      const order = new Order({
-        storeId,
-        products,
-        buyerInfo,
-        total,
-        commission,
-        paymentStatus: "pending",
-      });
-
-      await order.save();
-      res.status(201).json(order);
-    } catch (err) {
-      console.error("Order creation error:", err);
-      res.status(500).json({ error: "Failed to create order" });
-    }
-  }
-);
-
-// Get order by ID
+// Get order by ID (Public - anyone with the order ID can view it)
 router.get("/:id", async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
       .populate("storeId", "name slug")
-      .populate("products.productId", "name price");
+      .populate("products.productId", "name price image");
     
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
@@ -76,6 +33,12 @@ router.get("/history/:email", async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(req.params.email)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
     const orders = await Order.find({ "buyerInfo.email": req.params.email })
       .populate("storeId", "name slug")
       .limit(limit * 1)
@@ -87,7 +50,7 @@ router.get("/history/:email", async (req, res) => {
     res.json({
       orders,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count,
     });
   } catch (err) {
@@ -99,7 +62,7 @@ router.get("/history/:email", async (req, res) => {
 // Get orders for a store (Protected - store owner only)
 router.get("/store/:storeId", authMiddleware, async (req, res) => {
   try {
-    // ✅ Verify store ownership
+    // Verify store ownership
     const store = await Store.findById(req.params.storeId);
     if (!store) {
       return res.status(404).json({ error: "Store not found" });
@@ -108,24 +71,46 @@ router.get("/store/:storeId", authMiddleware, async (req, res) => {
       return res.status(403).json({ error: "Not authorized to view these orders" });
     }
 
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, status } = req.query;
 
-    const orders = await Order.find({ storeId: req.params.storeId })
+    // Build query
+    const query = { storeId: req.params.storeId };
+    if (status) {
+      query.paymentStatus = status;
+    }
+
+    const orders = await Order.find(query)
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
 
-    const count = await Order.countDocuments({ storeId: req.params.storeId });
+    const count = await Order.countDocuments(query);
 
-    // Calculate store revenue
-    const totalRevenue = orders.reduce((sum, order) => sum + (order.total - order.commission), 0);
+    // ✅ FIXED: Calculate revenue from ALL paid orders, not just current page
+    const allPaidOrders = await Order.find({ 
+      storeId: req.params.storeId,
+      paymentStatus: "paid" 
+    });
+    
+    const totalRevenue = allPaidOrders.reduce((sum, order) => 
+      sum + (order.total - order.commission), 0
+    );
+
+    const totalOrders = allPaidOrders.length;
+    const totalGrossRevenue = allPaidOrders.reduce((sum, order) => sum + order.total, 0);
+    const totalCommission = allPaidOrders.reduce((sum, order) => sum + order.commission, 0);
 
     res.json({
       orders,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count,
-      totalRevenue,
+      stats: {
+        totalRevenue, // Net revenue after commission
+        totalGrossRevenue, // Total before commission
+        totalCommission,
+        totalOrders
+      }
     });
   } catch (err) {
     console.error("Store orders fetch error:", err);
@@ -133,29 +118,85 @@ router.get("/store/:storeId", authMiddleware, async (req, res) => {
   }
 });
 
-// Update order payment status (For webhook)
-router.put("/:id/payment-status", async (req, res) => {
+// ✅ REMOVED: Payment status should only be updated by webhook
+// This endpoint was a security risk - removed
+
+// ✅ NEW: Get order statistics for store owner
+router.get("/store/:storeId/stats", authMiddleware, async (req, res) => {
   try {
-    const { paymentStatus } = req.body;
-
-    if (!["pending", "paid", "failed"].includes(paymentStatus)) {
-      return res.status(400).json({ error: "Invalid payment status" });
+    // Verify store ownership
+    const store = await Store.findById(req.params.storeId);
+    if (!store) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+    if (store.ownerId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: "Not authorized" });
     }
 
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { paymentStatus },
-      { new: true }
-    );
+    const orders = await Order.find({ 
+      storeId: req.params.storeId,
+      paymentStatus: "paid"
+    });
 
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
+    // Calculate stats
+    const totalOrders = orders.length;
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.total - o.commission), 0);
+    const totalGrossRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+    const totalCommission = orders.reduce((sum, o) => sum + o.commission, 0);
 
-    res.json(order);
+    // Calculate average order value
+    const avgOrderValue = totalOrders > 0 ? totalGrossRevenue / totalOrders : 0;
+
+    // Get top selling products
+    const productSales = {};
+    orders.forEach(order => {
+      order.products.forEach(product => {
+        const id = product.productId?.toString() || 'unknown';
+        if (!productSales[id]) {
+          productSales[id] = {
+            productId: id,
+            name: product.name,
+            quantity: 0,
+            revenue: 0
+          };
+        }
+        productSales[id].quantity += product.quantity || 1;
+        productSales[id].revenue += product.price * (product.quantity || 1);
+      });
+    });
+
+    const topProducts = Object.values(productSales)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+
+    // Orders by month (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const recentOrders = orders.filter(o => o.createdAt >= sixMonthsAgo);
+    const ordersByMonth = {};
+    
+    recentOrders.forEach(order => {
+      const month = order.createdAt.toISOString().slice(0, 7); // YYYY-MM
+      if (!ordersByMonth[month]) {
+        ordersByMonth[month] = { count: 0, revenue: 0 };
+      }
+      ordersByMonth[month].count += 1;
+      ordersByMonth[month].revenue += (order.total - order.commission);
+    });
+
+    res.json({
+      totalOrders,
+      totalRevenue,
+      totalGrossRevenue,
+      totalCommission,
+      avgOrderValue,
+      topProducts,
+      ordersByMonth
+    });
   } catch (err) {
-    console.error("Payment status update error:", err);
-    res.status(500).json({ error: "Failed to update payment status" });
+    console.error("Store stats fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch statistics" });
   }
 });
 

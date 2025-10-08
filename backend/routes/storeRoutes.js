@@ -16,7 +16,9 @@ router.post(
       .trim()
       .notEmpty()
       .matches(/^[a-z0-9-]+$/)
-      .withMessage("Slug must be lowercase letters, numbers, and hyphens only"),
+      .withMessage("Slug must be lowercase letters, numbers, and hyphens only")
+      .isLength({ min: 3, max: 50 })
+      .withMessage("Slug must be between 3 and 50 characters"),
   ],
   async (req, res) => {
     try {
@@ -36,14 +38,21 @@ router.post(
       // Check if user already has a store (optional - remove if multiple stores allowed)
       const userStore = await Store.findOne({ ownerId: req.user.id });
       if (userStore) {
-        return res.status(400).json({ message: "You already have a store" });
+        return res.status(400).json({ 
+          message: "You already have a store",
+          existingStore: {
+            id: userStore._id,
+            name: userStore.name,
+            slug: userStore.slug
+          }
+        });
       }
 
       const store = new Store({
-        ownerId: req.user.id, // ✅ Use authenticated user
+        ownerId: req.user.id,
         name,
         slug,
-        logo,
+        logo: logo || "",
         theme: theme || "light",
       });
 
@@ -60,15 +69,24 @@ router.post(
 router.put(
   "/:id",
   authMiddleware,
+  [
+    body("name").optional().trim().notEmpty().withMessage("Store name cannot be empty"),
+    body("theme").optional().isIn(["light", "dark"]).withMessage("Theme must be light or dark"),
+  ],
   async (req, res) => {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
       const store = await Store.findById(req.params.id);
       
       if (!store) {
         return res.status(404).json({ error: "Store not found" });
       }
 
-      // ✅ Verify ownership
+      // Verify ownership
       if (store.ownerId.toString() !== req.user.id.toString()) {
         return res.status(403).json({ error: "Not authorized to edit this store" });
       }
@@ -97,23 +115,42 @@ router.get("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Store not found" });
     }
 
-    // ✅ Verify ownership
+    // Verify ownership
     if (store.ownerId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ error: "Not authorized to view this store" });
     }
 
-    res.json(store);
+    // Get product count
+    const productCount = await Product.countDocuments({ storeId: store._id });
+
+    res.json({
+      ...store.toObject(),
+      productCount
+    });
   } catch (err) {
     console.error("Store fetch error:", err);
     res.status(500).json({ error: "Failed to fetch store" });
   }
 });
 
+// ✅ FIXED: Changed route path to avoid conflict with /:id
 // Get user's own stores (Protected)
-router.get("/my/stores", authMiddleware, async (req, res) => {
+router.get("/user/my-stores", authMiddleware, async (req, res) => {
   try {
     const stores = await Store.find({ ownerId: req.user.id });
-    res.json(stores);
+    
+    // Add product count for each store
+    const storesWithCounts = await Promise.all(
+      stores.map(async (store) => {
+        const productCount = await Product.countDocuments({ storeId: store._id });
+        return {
+          ...store.toObject(),
+          productCount
+        };
+      })
+    );
+    
+    res.json(storesWithCounts);
   } catch (err) {
     console.error("Stores fetch error:", err);
     res.status(500).json({ error: "Failed to fetch stores" });
@@ -121,7 +158,7 @@ router.get("/my/stores", authMiddleware, async (req, res) => {
 });
 
 // Get store by slug (Public - for storefront)
-router.get("/slug/:slug", async (req, res) => {
+router.get("/public/slug/:slug", async (req, res) => {
   try {
     const store = await Store.findOne({ slug: req.params.slug }).select("-ownerId");
     
@@ -129,8 +166,13 @@ router.get("/slug/:slug", async (req, res) => {
       return res.status(404).json({ error: "Store not found" });
     }
 
+    // ✅ FIXED: Check if store is active
+    if (!store.isActive) {
+      return res.status(403).json({ error: "This store is currently unavailable" });
+    }
+
     // Fetch products belonging to this store
-    const products = await Product.find({ storeId: store._id });
+    const products = await Product.find({ storeId: store._id }).sort({ createdAt: -1 });
 
     res.json({
       store,
@@ -151,17 +193,20 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Store not found" });
     }
 
-    // ✅ Verify ownership
+    // Verify ownership
     if (store.ownerId.toString() !== req.user.id.toString()) {
       return res.status(403).json({ error: "Not authorized to delete this store" });
     }
 
     // Delete all products associated with store
-    await Product.deleteMany({ storeId: store._id });
+    const deletedProducts = await Product.deleteMany({ storeId: store._id });
     
     await Store.findByIdAndDelete(req.params.id);
     
-    res.json({ message: "Store and associated products deleted successfully" });
+    res.json({ 
+      message: "Store and associated products deleted successfully",
+      deletedProductCount: deletedProducts.deletedCount
+    });
   } catch (err) {
     console.error("Store deletion error:", err);
     res.status(500).json({ error: "Failed to delete store" });

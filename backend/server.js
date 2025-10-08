@@ -16,7 +16,14 @@ import adminRoutes from "./routes/adminRoutes.js";
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET', 'STRIPE_SECRET_KEY', 'CLIENT_URL'];
+const requiredEnvVars = [
+  'MONGO_URI', 
+  'JWT_SECRET', 
+  'STRIPE_SECRET_KEY', 
+  'STRIPE_WEBHOOK_SECRET',
+  'CLIENT_URL'
+];
+
 requiredEnvVars.forEach((envVar) => {
   if (!process.env[envVar]) {
     console.error(`❌ Missing required environment variable: ${envVar}`);
@@ -35,38 +42,100 @@ app.use(cors({
   credentials: true,
 }));
 
-// Body parsing middleware
-app.use(express.json({ limit: "10mb" })); // ✅ Added with size limit
+// ✅ CRITICAL: Webhook route MUST be before JSON parser
+app.use("/payment/webhook", paymentRoutes);
+
+// Body parsing middleware (applied to all other routes)
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Custom NoSQL injection sanitization middleware
+const sanitizeInput = (req, res, next) => {
+  const sanitize = (obj) => {
+    if (typeof obj !== 'object' || obj === null) return obj;
+    
+    Object.keys(obj).forEach(key => {
+      // Remove keys that start with $ or contain .
+      if (key.startsWith('$') || key.includes('.')) {
+        console.log(`Sanitized key: ${key}`);
+        delete obj[key];
+      } else if (typeof obj[key] === 'object') {
+        sanitize(obj[key]);
+      }
+    });
+    return obj;
+  };
+
+  if (req.body) sanitize(req.body);
+  if (req.params) sanitize(req.params);
+  if (req.query) sanitize(req.query);
+  
+  next();
+};
+
+app.use(sanitizeInput);
 
 // Rate limiting for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 requests per window
-  message: "Too many attempts, please try again later",
+  message: "Too many login attempts, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// General API rate limiter
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: "Too many requests, please try again later",
 });
 
 // Health check endpoint
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString() });
+  res.json({ 
+    status: "OK", 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // Routes
-app.use("/auth", authLimiter, authRoutes); // ✅ Added with rate limiting
-app.use("/store", storeRoutes);
-app.use("/products", productRoutes);
-app.use("/orders", orderRoutes); // ✅ Added
-app.use("/payment", paymentRoutes); // ✅ Added
-app.use("/admin", adminRoutes);
+app.use("/auth", authLimiter, authRoutes);
+app.use("/store", apiLimiter, storeRoutes);
+app.use("/products", apiLimiter, productRoutes);
+app.use("/orders", apiLimiter, orderRoutes);
+app.use("/payment", apiLimiter, paymentRoutes); // Non-webhook routes
+app.use("/admin", apiLimiter, adminRoutes);
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
+  res.status(404).json({ 
+    error: "Route not found",
+    path: req.originalUrl 
+  });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error("Error:", err);
+  
+  // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      error: "Validation failed",
+      details: Object.values(err.errors).map(e => e.message)
+    });
+  }
+  
+  // Mongoose duplicate key error
+  if (err.code === 11000) {
+    return res.status(400).json({
+      error: "Duplicate entry",
+      field: Object.keys(err.keyPattern)[0]
+    });
+  }
+  
   res.status(err.status || 500).json({
     error: process.env.NODE_ENV === "production" 
       ? "Internal server error" 
@@ -79,9 +148,18 @@ const PORT = process.env.PORT || 5000;
 
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`✅ Environment: ${process.env.NODE_ENV || "development"}`);
+      console.log(`✅ Client URL: ${process.env.CLIENT_URL}`);
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      console.log('SIGTERM received, shutting down gracefully');
+      server.close(() => {
+        console.log('Process terminated');
+      });
     });
   })
   .catch((err) => {

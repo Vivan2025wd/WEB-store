@@ -13,20 +13,29 @@ router.use(authMiddleware, requireAdmin);
 // Get all sellers (non-admin users)
 router.get("/sellers", async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, search = "" } = req.query;
 
-    const sellers = await User.find({ isAdmin: false })
+    // Build search query
+    const query = { isAdmin: false };
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const sellers = await User.find(query)
       .select("-passwordHash")
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
 
-    const count = await User.countDocuments({ isAdmin: false });
+    const count = await User.countDocuments(query);
 
     res.json({
       sellers,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count,
     });
   } catch (err) {
@@ -38,20 +47,34 @@ router.get("/sellers", async (req, res) => {
 // Get all stores
 router.get("/stores", async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, search = "", status = "" } = req.query;
 
-    const stores = await Store.find()
+    // Build query
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { slug: { $regex: search, $options: "i" } }
+      ];
+    }
+    if (status === "active") {
+      query.isActive = true;
+    } else if (status === "inactive") {
+      query.isActive = false;
+    }
+
+    const stores = await Store.find(query)
       .populate("ownerId", "name email")
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
 
-    const count = await Store.countDocuments();
+    const count = await Store.countDocuments(query);
 
     res.json({
       stores,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count,
     });
   } catch (err) {
@@ -63,7 +86,17 @@ router.get("/stores", async (req, res) => {
 // Get revenue and commission statistics
 router.get("/stats", async (req, res) => {
   try {
-    const orders = await Order.find({ paymentStatus: "paid" });
+    const { startDate, endDate } = req.query;
+
+    // Build date filter
+    const dateFilter = { paymentStatus: "paid" };
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
+      if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
+    }
+
+    const orders = await Order.find(dateFilter);
 
     const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
     const totalCommission = orders.reduce((sum, o) => sum + o.commission, 0);
@@ -100,6 +133,7 @@ router.get("/stats", async (req, res) => {
           ...stat,
           storeName: store?.name || "Unknown",
           storeSlug: store?.slug || "",
+          isActive: store?.isActive || false,
           owner: store?.ownerId || null,
         };
       })
@@ -108,8 +142,22 @@ router.get("/stats", async (req, res) => {
     // Additional stats
     const totalOrders = orders.length;
     const totalStores = await Store.countDocuments();
+    const activeStores = await Store.countDocuments({ isActive: true });
     const totalSellers = await User.countDocuments({ isAdmin: false });
     const totalProducts = await Product.countDocuments();
+
+    // Recent activity (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentOrders = await Order.countDocuments({
+      paymentStatus: "paid",
+      createdAt: { $gte: thirtyDaysAgo }
+    });
+
+    const recentStores = await Store.countDocuments({
+      createdAt: { $gte: thirtyDaysAgo }
+    });
 
     res.json({
       overview: {
@@ -118,8 +166,13 @@ router.get("/stats", async (req, res) => {
         sellerRevenue,
         totalOrders,
         totalStores,
+        activeStores,
         totalSellers,
         totalProducts,
+        recentOrders,
+        recentStores,
+        avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+        avgCommissionRate: totalRevenue > 0 ? (totalCommission / totalRevenue) * 100 : 0
       },
       storeStats: storeStatsArray.sort((a, b) => b.revenue - a.revenue),
     });
@@ -132,9 +185,19 @@ router.get("/stats", async (req, res) => {
 // Get all orders
 router.get("/orders", async (req, res) => {
   try {
-    const { page = 1, limit = 20, status } = req.query;
+    const { page = 1, limit = 20, status, storeId, search = "" } = req.query;
 
-    const query = status ? { paymentStatus: status } : {};
+    // Build query
+    const query = {};
+    if (status) {
+      query.paymentStatus = status;
+    }
+    if (storeId) {
+      query.storeId = storeId;
+    }
+    if (search) {
+      query["buyerInfo.email"] = { $regex: search, $options: "i" };
+    }
 
     const orders = await Order.find(query)
       .populate("storeId", "name slug")
@@ -147,7 +210,7 @@ router.get("/orders", async (req, res) => {
     res.json({
       orders,
       totalPages: Math.ceil(count / limit),
-      currentPage: page,
+      currentPage: Number(page),
       total: count,
     });
   } catch (err) {
@@ -186,6 +249,19 @@ router.get("/sellers/:id", async (req, res) => {
     // Get product count
     const productCount = await Product.countDocuments({ storeId: { $in: storeIds } });
 
+    // Calculate additional metrics
+    const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
+    
+    // Get recent activity (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentOrders = await Order.countDocuments({
+      storeId: { $in: storeIds },
+      paymentStatus: "paid",
+      createdAt: { $gte: thirtyDaysAgo }
+    });
+
     res.json({
       seller,
       stores,
@@ -195,6 +271,9 @@ router.get("/sellers/:id", async (req, res) => {
         totalCommission,
         sellerEarnings,
         productCount,
+        avgOrderValue,
+        recentOrders,
+        storeCount: stores.length
       },
     });
   } catch (err) {
@@ -220,11 +299,28 @@ router.delete("/sellers/:id", async (req, res) => {
     const stores = await Store.find({ ownerId: user._id });
     const storeIds = stores.map(s => s._id);
 
-    // Delete products
-    await Product.deleteMany({ storeId: { $in: storeIds } });
+    // ✅ Check if there are any paid orders
+    const paidOrders = await Order.countDocuments({
+      storeId: { $in: storeIds },
+      paymentStatus: "paid"
+    });
 
-    // Note: Orders are kept for record-keeping
-    // await Order.deleteMany({ storeId: { $in: storeIds } });
+    if (paidOrders > 0) {
+      return res.status(400).json({ 
+        error: "Cannot delete seller with order history",
+        message: "This seller has completed orders. Consider deactivating their stores instead.",
+        paidOrderCount: paidOrders
+      });
+    }
+
+    // Delete products
+    const deletedProducts = await Product.deleteMany({ storeId: { $in: storeIds } });
+
+    // Delete pending/failed orders (keep paid orders for records)
+    const deletedOrders = await Order.deleteMany({ 
+      storeId: { $in: storeIds },
+      paymentStatus: { $in: ["pending", "failed"] }
+    });
 
     // Delete stores
     await Store.deleteMany({ ownerId: user._id });
@@ -232,7 +328,12 @@ router.delete("/sellers/:id", async (req, res) => {
     // Delete user
     await User.findByIdAndDelete(req.params.id);
 
-    res.json({ message: "Seller and associated data deleted successfully" });
+    res.json({ 
+      message: "Seller and associated data deleted successfully",
+      deletedProducts: deletedProducts.deletedCount,
+      deletedOrders: deletedOrders.deletedCount,
+      deletedStores: stores.length
+    });
   } catch (err) {
     console.error("Seller deletion error:", err);
     res.status(500).json({ error: "Failed to delete seller" });
@@ -252,16 +353,81 @@ router.put("/stores/:id/status", async (req, res) => {
       req.params.id,
       { isActive },
       { new: true }
-    );
+    ).populate("ownerId", "name email");
 
     if (!store) {
       return res.status(404).json({ error: "Store not found" });
     }
 
-    res.json(store);
+    res.json({
+      ...store.toObject(),
+      message: isActive ? "Store activated successfully" : "Store suspended successfully"
+    });
   } catch (err) {
     console.error("Store status update error:", err);
     res.status(500).json({ error: "Failed to update store status" });
+  }
+});
+
+// ✅ NEW: Get dashboard overview
+router.get("/dashboard", async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    // Today's stats
+    const todayOrders = await Order.countDocuments({
+      paymentStatus: "paid",
+      createdAt: { $gte: startOfDay }
+    });
+
+    const todayRevenue = await Order.aggregate([
+      { $match: { paymentStatus: "paid", createdAt: { $gte: startOfDay } } },
+      { $group: { _id: null, total: { $sum: "$total" } } }
+    ]);
+
+    // Month's stats
+    const monthOrders = await Order.countDocuments({
+      paymentStatus: "paid",
+      createdAt: { $gte: startOfMonth }
+    });
+
+    const monthRevenue = await Order.aggregate([
+      { $match: { paymentStatus: "paid", createdAt: { $gte: startOfMonth } } },
+      { $group: { _id: null, total: { $sum: "$total" } } }
+    ]);
+
+    // Year's stats
+    const yearRevenue = await Order.aggregate([
+      { $match: { paymentStatus: "paid", createdAt: { $gte: startOfYear } } },
+      { $group: { _id: null, total: { $sum: "$total" } } }
+    ]);
+
+    res.json({
+      today: {
+        orders: todayOrders,
+        revenue: todayRevenue[0]?.total || 0
+      },
+      month: {
+        orders: monthOrders,
+        revenue: monthRevenue[0]?.total || 0
+      },
+      year: {
+        revenue: yearRevenue[0]?.total || 0
+      },
+      totals: {
+        sellers: await User.countDocuments({ isAdmin: false }),
+        stores: await Store.countDocuments(),
+        activeStores: await Store.countDocuments({ isActive: true }),
+        products: await Product.countDocuments(),
+        orders: await Order.countDocuments({ paymentStatus: "paid" })
+      }
+    });
+  } catch (err) {
+    console.error("Dashboard fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch dashboard data" });
   }
 });
 
