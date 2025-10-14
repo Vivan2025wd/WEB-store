@@ -17,7 +17,8 @@ const api = {
         const err = await res.json().catch(() => ({ 
           message: `Request failed with status ${res.status}` 
         }));
-        const error = new Error(err.message || err.error || "Request failed");
+        console.error(`API GET Error [${res.status}] ${url}:`, err);
+        const error = new Error(err.message || err.error || `HTTP ${res.status}`);
         error.response = { 
           status: res.status, 
           data: err 
@@ -54,7 +55,8 @@ const api = {
         const err = await res.json().catch(() => ({ 
           message: `Request failed with status ${res.status}` 
         }));
-        const error = new Error(err.message || err.error || "Request failed");
+        console.error(`API POST Error [${res.status}] ${url}:`, err);
+        const error = new Error(err.message || err.error || `HTTP ${res.status}`);
         error.response = { 
           status: res.status, 
           data: err 
@@ -89,7 +91,8 @@ const api = {
         const err = await res.json().catch(() => ({ 
           message: `Request failed with status ${res.status}` 
         }));
-        const error = new Error(err.message || err.error || "Request failed");
+        console.error(`API PUT Error [${res.status}] ${url}:`, err);
+        const error = new Error(err.message || err.error || `HTTP ${res.status}`);
         error.response = { 
           status: res.status, 
           data: err 
@@ -123,7 +126,8 @@ const api = {
         const err = await res.json().catch(() => ({ 
           message: `Request failed with status ${res.status}` 
         }));
-        const error = new Error(err.message || err.error || "Request failed");
+        console.error(`API DELETE Error [${res.status}] ${url}:`, err);
+        const error = new Error(err.message || err.error || `HTTP ${res.status}`);
         error.response = { 
           status: res.status, 
           data: err 

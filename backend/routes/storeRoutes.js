@@ -35,6 +35,83 @@ const upload = multer({
   }
 });
 
+// ========================================
+// PUBLIC ROUTES (No authentication needed)
+// ========================================
+
+// Get all active stores (Public)
+router.get("/all", async (req, res) => {
+  try {
+    console.log("Fetching all active stores...");
+    
+    const stores = await Store.find({ isActive: true })
+      .select('name slug logo theme createdAt ownerId')
+      .populate('ownerId', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    console.log(`Found ${stores.length} active stores`);
+    
+    // Add product count for each store
+    const storesWithCounts = await Promise.all(
+      stores.map(async (store) => {
+        try {
+          const productCount = await Product.countDocuments({ storeId: store._id });
+          return {
+            ...store,
+            productCount
+          };
+        } catch (err) {
+          console.error(`Error counting products for store ${store._id}:`, err);
+          return {
+            ...store,
+            productCount: 0
+          };
+        }
+      })
+    );
+    
+    res.json(storesWithCounts);
+  } catch (err) {
+    console.error("Error fetching all stores:", err);
+    res.status(500).json({ 
+      error: "Failed to fetch stores",
+      message: err.message 
+    });
+  }
+});
+
+// Get store by slug (Public - for storefront)
+router.get("/slug/:slug", async (req, res) => {
+  try {
+    const store = await Store.findOne({ slug: req.params.slug })
+      .populate('ownerId', 'name email');
+    
+    if (!store) {
+      return res.status(404).json({ error: "Store not found" });
+    }
+
+    if (!store.isActive) {
+      return res.status(403).json({ error: "This store is currently unavailable" });
+    }
+
+    // Fetch products belonging to this store
+    const products = await Product.find({ storeId: store._id }).sort({ createdAt: -1 });
+
+    res.json({
+      store,
+      products,
+    });
+  } catch (err) {
+    console.error("Public store fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch store" });
+  }
+});
+
+// ========================================
+// PROTECTED ROUTES (Authentication required)
+// ========================================
+
 // Create store (Protected)
 router.post(
   "/create",
@@ -97,6 +174,55 @@ router.post(
     }
   }
 );
+
+// Get current user's store (Protected) - Single store per user
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    console.log("Fetching store for user:", req.user.id);
+    
+    const store = await Store.findOne({ ownerId: req.user.id });
+    
+    if (!store) {
+      console.log("No store found for user:", req.user.id);
+      return res.status(404).json({ message: "No store found for this user" });
+    }
+    
+    // Add product count
+    const productCount = await Product.countDocuments({ storeId: store._id });
+    
+    console.log("Store found:", store._id);
+    res.json({
+      ...store.toObject(),
+      productCount
+    });
+  } catch (err) {
+    console.error("Error in /store/me:", err);
+    res.status(500).json({ error: "Failed to fetch store" });
+  }
+});
+
+// Get user's own stores (Protected) - Multiple stores support
+router.get("/user/my-stores", authMiddleware, async (req, res) => {
+  try {
+    const stores = await Store.find({ ownerId: req.user.id });
+    
+    // Add product count for each store
+    const storesWithCounts = await Promise.all(
+      stores.map(async (store) => {
+        const productCount = await Product.countDocuments({ storeId: store._id });
+        return {
+          ...store.toObject(),
+          productCount
+        };
+      })
+    );
+    
+    res.json(storesWithCounts);
+  } catch (err) {
+    console.error("Stores fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch stores" });
+  }
+});
 
 // Update store (Protected - owner only)
 router.put(
@@ -167,55 +293,6 @@ router.get("/:id", authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error("Store fetch error:", err);
-    res.status(500).json({ error: "Failed to fetch store" });
-  }
-});
-
-// Get user's own stores (Protected)
-router.get("/user/my-stores", authMiddleware, async (req, res) => {
-  try {
-    const stores = await Store.find({ ownerId: req.user.id });
-    
-    // Add product count for each store
-    const storesWithCounts = await Promise.all(
-      stores.map(async (store) => {
-        const productCount = await Product.countDocuments({ storeId: store._id });
-        return {
-          ...store.toObject(),
-          productCount
-        };
-      })
-    );
-    
-    res.json(storesWithCounts);
-  } catch (err) {
-    console.error("Stores fetch error:", err);
-    res.status(500).json({ error: "Failed to fetch stores" });
-  }
-});
-
-// Get store by slug (Public - for storefront)
-router.get("/public/slug/:slug", async (req, res) => {
-  try {
-    const store = await Store.findOne({ slug: req.params.slug }).select("-ownerId");
-    
-    if (!store) {
-      return res.status(404).json({ error: "Store not found" });
-    }
-
-    if (!store.isActive) {
-      return res.status(403).json({ error: "This store is currently unavailable" });
-    }
-
-    // Fetch products belonging to this store
-    const products = await Product.find({ storeId: store._id }).sort({ createdAt: -1 });
-
-    res.json({
-      store,
-      products,
-    });
-  } catch (err) {
-    console.error("Public store fetch error:", err);
     res.status(500).json({ error: "Failed to fetch store" });
   }
 });

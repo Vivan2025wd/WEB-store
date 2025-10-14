@@ -34,34 +34,56 @@ export default function Dashboard() {
           return;
         }
 
+        console.log("Fetching user data...");
         // Verify with backend and check admin status
         const authRes = await api.get("/auth/me");
+        console.log("Auth response:", authRes.data);
         
         if (authRes.data.isAdmin) {
+          console.log("User is admin, fetching stats...");
           setIsAdmin(true);
           const statsRes = await api.get("/admin/stats");
           setAdminStats(statsRes.data);
         } else {
           // Seller flow
+          console.log("User is seller, fetching store...");
           try {
             const storeRes = await api.get("/store/me");
+            console.log("Store response:", storeRes.data);
             setStore(storeRes.data);
 
             if (storeRes.data?._id) {
+              console.log("Fetching products for store:", storeRes.data._id);
               const productsRes = await api.get(`/products/store/${storeRes.data._id}`);
-              setProducts(productsRes.data);
+              console.log("Products response:", productsRes.data);
+              
+              // Handle different response formats
+              const productsData = productsRes.data?.products || productsRes.data;
+              setProducts(Array.isArray(productsData) ? productsData : []);
             }
           } catch (storeErr) {
-            // No store yet - this is okay
-            if (storeErr.response?.status !== 404) {
-              console.error("Error fetching store:", storeErr);
+            console.log("Store fetch error:", storeErr);
+            // No store yet - this is okay for new sellers
+            if (storeErr.response?.status === 404) {
+              console.log("No store found (404) - user needs to create one");
+              setStore(null);
+            } else {
+              console.error("Unexpected error fetching store:", storeErr);
+              // Don't show error for missing store, but log unexpected errors
+              if (storeErr.response?.status !== 404) {
+                setError(`Failed to load store: ${storeErr.message}`);
+              }
             }
-            setStore(null);
           }
         }
       } catch (err) {
         console.error("Dashboard fetch error:", err);
-        setError(err.response?.data?.message || "Failed to load dashboard data");
+        console.error("Error details:", {
+          message: err.message,
+          response: err.response,
+          stack: err.stack
+        });
+        setError(err.response?.data?.message || err.message || "Failed to load dashboard data");
       } finally {
         setLoading(false);
       }
@@ -91,7 +113,7 @@ export default function Dashboard() {
 
     try {
       if (editingProduct) {
-        const res = await api.put(`/products/${editingProduct._id}/edit`, form);
+        const res = await api.put(`/products/${editingProduct._id}`, form);
         setProducts(products.map((p) => (p._id === editingProduct._id ? res.data : p)));
         setSuccessMessage("Product updated successfully!");
         setEditingProduct(null);
@@ -106,7 +128,7 @@ export default function Dashboard() {
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
       console.error("Failed to save product", err);
-      setError(err.response?.data?.message || "Failed to save product");
+      setError(err.response?.data?.message || err.message || "Failed to save product");
     }
   };
 
@@ -115,13 +137,14 @@ export default function Dashboard() {
 
     setError("");
     try {
-      await api.delete(`/products/${id}/delete`);
+      // ✅ FIXED: Changed from /products/:id/delete to /products/:id
+      await api.delete(`/products/${id}`);
       setProducts(products.filter((p) => p._id !== id));
       setSuccessMessage("Product deleted successfully!");
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
       console.error("Failed to delete product", err);
-      setError(err.response?.data?.message || "Failed to delete product");
+      setError(err.response?.data?.message || err.message || "Failed to delete product");
     }
   };
 
